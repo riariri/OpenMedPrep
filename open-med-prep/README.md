@@ -1,1 +1,0 @@
-# OpenMedPrep A medical education platform.
