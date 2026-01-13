@@ -3,16 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OpenMedPrep | Full Question Bank</title>
+    <title>OpenMedPrep | Professional Medical Board Mastery</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap');
-        body { font-family: 'Plus Jakarta Sans', sans-serif; }
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+        body { font-family: 'Plus Jakarta Sans', sans-serif; letter-spacing: -0.01em; }
+        .nav-item-active { background: #eff6ff; color: #2563eb; border-right: 4px solid #2563eb; }
     </style>
 </head>
-<body class="bg-slate-50 text-slate-900">
+<body class="bg-[#f8fafc] text-slate-900">
     <div id="root"></div>
 
     <script>
@@ -20,148 +21,138 @@
         const { useState } = React;
 
         const App = () => {
-            const [page, setPage] = useState('home');
+            const [view, setView] = useState('dashboard'); // dashboard, qbank, library, quiz
             const [selectedTrack, setSelectedTrack] = useState(null);
             const [currentIdx, setCurrentIdx] = useState(0);
             const [score, setScore] = useState(0);
-            const [showExplanation, setShowExplanation] = useState(false);
-            const [userAnswer, setUserAnswer] = useState(null);
+            const [showExp, setShowExp] = useState(false);
 
             const questionBank = {
                 USMLE: [
-                    {
-                        q: "A 65-year-old male presents with sudden onset of painless vision loss in the right eye. Fundoscopy reveals a pale retina with a cherry-red spot at the fovea. What is the most likely diagnosis?",
-                        options: ["Central Retinal Vein Occlusion", "Central Retinal Artery Occlusion", "Retinal Detachment", "Acute Angle Closure Glaucoma"],
-                        correct: 1,
-                        explanation: "This is a classic Central Retinal Artery Occlusion (CRAO). The cherry-red spot is seen because the fovea has a separate blood supply (ciliary arteries), while the rest of the retina is pale due to ischemia."
-                    },
-                    {
-                        q: "A 24-year-old female presents with a 2-day history of dysuria and increased urinary frequency. Urine dipstick is positive for nitrites and leukocyte esterase. What is the most common causative organism?",
-                        options: ["Staphylococcus saprophyticus", "Proteus mirabilis", "Escherichia coli", "Klebsiella pneumoniae"],
-                        correct: 2,
-                        explanation: "E. coli is the most common cause of uncomplicated UTIs in young women, responsible for approximately 80-85% of cases."
-                    },
-                    {
-                        q: "A 55-year-old man with a history of hypertension presents with sudden onset of 'tearing' chest pain radiating to the back. BP is 190/110 mmHg. What is the most likely diagnosis?",
-                        options: ["Myocardial Infarction", "Aortic Dissection", "Pulmonary Embolism", "Pneumothorax"],
-                        correct: 1,
-                        explanation: "Tearing chest pain radiating to the back in a hypertensive patient is highly suggestive of Aortic Dissection."
-                    }
+                    { q: "65yo M, sudden monocular vision loss, cherry-red spot.", options: ["CRVO", "CRAO", "Retinal Detachment", "Glaucoma"], correct: 1, explanation: "CRAO is a medical emergency requiring immediate ocular massage and ophthalmology consult." },
+                    { q: "30yo F, malar rash, joint pain, proteinuria.", options: ["Rheumatoid Arthritis", "SLE", "Scleroderma", "Dermatomyositis"], correct: 1, explanation: "Systemic Lupus Erythematosus (SLE) presents with multi-system involvement and anti-dsDNA/anti-Smith antibodies." }
                 ],
                 UKMLA: [
-                    {
-                        q: "A 45-year-old female presents with severe epigastric pain radiating to the back. She has a history of gallstones. Amylase is 3x the upper limit of normal. What is the most likely diagnosis?",
-                        options: ["Acute Pancreatitis", "Biliary Colic", "Peptic Ulcer Perforation", "Acute Cholecystitis"],
-                        correct: 0,
-                        explanation: "Epigastric pain radiating to the back with significantly elevated amylase/lipase is diagnostic of Acute Pancreatitis."
-                    },
-                    {
-                        q: "A 72-year-old man presents with weight loss and a change in bowel habits. Blood tests reveal iron-deficiency anemia. What is the most appropriate next step?",
-                        options: ["Iron Supplementation", "Abdominal Ultrasound", "Two-week wait Colonoscopy", "Repeat bloods in 3 months"],
-                        correct: 2,
-                        explanation: "In an older patient, iron-deficiency anemia and bowel changes are red flags for colorectal cancer. A fast-track (2WW) colonoscopy is mandatory."
-                    }
+                    { q: "Epigastric pain radiating to back, history of gallstones.", options: ["Pancreatitis", "Biliary Colic", "Peptic Ulcer", "MI"], correct: 0, explanation: "Acute pancreatitis is often secondary to gallstones or alcohol. Amylase/Lipase will be >3x normal." }
                 ]
             };
 
-            const handleAnswer = (idx) => {
-                if (showExplanation) return;
-                setUserAnswer(idx);
-                setShowExplanation(true);
-                if (idx === questionBank[selectedTrack][currentIdx].correct) {
-                    setScore(prev => prev + 1);
-                }
-            };
+            // Shared Components
+            const Header = () => e('header', { className: "h-16 border-b bg-white flex items-center justify-between px-8 sticky top-0 z-10" },
+                e('div', { className: "flex items-center gap-2" },
+                    e('div', { className: "w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold" }, "+"),
+                    e('span', { className: "font-extrabold text-xl tracking-tighter" }, "OpenMedPrep")
+                ),
+                e('div', { className: "flex gap-4 items-center" },
+                    e('div', { className: "w-8 h-8 bg-slate-200 rounded-full" })
+                )
+            );
 
-            const handleNext = () => {
-                if (currentIdx + 1 < questionBank[selectedTrack].length) {
-                    setCurrentIdx(prev => prev + 1);
-                    setShowExplanation(false);
-                    setUserAnswer(null);
-                } else {
-                    setPage('results');
-                }
-            };
+            const Sidebar = () => e('aside', { className: "w-64 border-r h-[calc(100vh-64px)] bg-white hidden md:block" },
+                e('nav', { className: "py-6" },
+                    [
+                        { id: 'dashboard', label: 'Dashboard', icon: '📊' },
+                        { id: 'qbank', label: 'Question Bank', icon: '📝' },
+                        { id: 'library', label: 'High-Yield Library', icon: '📚' },
+                    ].map(item => e('button', {
+                        key: item.id,
+                        onClick: () => setView(item.id),
+                        className: `w-full text-left px-6 py-4 flex items-center gap-3 font-semibold transition-all ${view === item.id ? 'nav-item-active' : 'text-slate-500 hover:bg-slate-50'}`
+                    }, e('span', null, item.icon), item.label))
+                )
+            );
 
-            const reset = () => {
-                setPage('home');
-                setScore(0);
-                setCurrentIdx(0);
-                setShowExplanation(false);
-                setUserAnswer(null);
-            };
+            // View: Dashboard
+            const Dashboard = () => e('main', { className: "p-8 w-full overflow-y-auto" },
+                e('h2', { className: "text-3xl font-extrabold mb-2" }, "Welcome back, Doctor"),
+                e('p', { className: "text-slate-500 mb-8" }, "You have completed 12% of your USMLE track this week."),
+                e('div', { className: "grid grid-cols-1 md:grid-cols-3 gap-6 mb-8" },
+                    [{l: 'Accuracy', v: '84%', c: 'text-green-600'}, {l: 'Questions Done', v: '142', c: 'text-blue-600'}, {l: 'Global Rank', v: '#1,204', c: 'text-purple-600'}].map(s => 
+                        e('div', { key: s.l, className: "bg-white p-6 rounded-2xl shadow-sm border" },
+                            e('div', { className: "text-sm font-bold text-slate-400 uppercase tracking-wider" }, s.l),
+                            e('div', { className: `text-3xl font-black ${s.c}` }, s.v)
+                        )
+                    )
+                ),
+                e('h3', { className: "text-xl font-bold mb-4" }, "Continue Learning"),
+                e('div', { className: "grid grid-cols-1 md:grid-cols-2 gap-4" },
+                    ['USMLE', 'UKMLA'].map(t => e('button', {
+                        key: t,
+                        onClick: () => { setSelectedTrack(t); setView('qbank'); },
+                        className: "bg-white p-6 rounded-2xl border text-left hover:border-blue-500 transition-all group"
+                    },
+                        e('div', { className: "text-blue-600 font-bold text-sm mb-1" }, t),
+                        e('div', { className: "text-xl font-bold mb-2" }, `${t} Step 2 Clinical Knowledge`),
+                        e('div', { className: "w-full bg-slate-100 h-2 rounded-full overflow-hidden" }, 
+                            e('div', { className: "bg-blue-600 h-full w-1/3" })
+                        )
+                    ))
+                )
+            );
 
-            if (page === 'quiz') {
-                const qData = questionBank[selectedTrack][currentIdx];
-                return e('div', { className: "min-h-screen p-6 bg-slate-50 flex flex-col items-center" },
-                    e('div', { className: "w-full max-w-2xl" },
-                        e('div', { className: "flex justify-between items-center mb-8" },
-                            e('button', { onClick: reset, className: "text-slate-500 font-bold hover:text-slate-800" }, "← Exit Session"),
-                            e('div', { className: "bg-blue-600 text-white px-4 py-1 rounded-full text-sm font-bold" }, `Score: ${score}`),
-                            e('div', { className: "text-slate-400 font-bold" }, `Q ${currentIdx + 1}/${questionBank[selectedTrack].length}`)
+            // View: QBank Selector
+            const QBank = () => e('main', { className: "p-8 w-full" },
+                e('h2', { className: "text-3xl font-extrabold mb-8" }, "Question Bank"),
+                e('div', { className: "space-y-4 max-w-3xl" },
+                    Object.keys(questionBank).map(track => e('div', { key: track, className: "bg-white rounded-2xl border p-6 flex items-center justify-between" },
+                        e('div', null,
+                            e('h4', { className: "text-xl font-bold" }, `${track} Track`),
+                            e('p', { className: "text-slate-500" }, `${questionBank[track].length} high-yield vignettes available.`)
                         ),
-                        e('div', { className: "bg-white p-8 md:p-12 rounded-[2.5rem] shadow-xl border border-slate-100" },
-                            e('h2', { className: "text-2xl font-bold mb-8 text-slate-800 leading-snug" }, qData.q),
+                        e('button', {
+                            onClick: () => { setSelectedTrack(track); setCurrentIdx(0); setScore(0); setView('quiz'); },
+                            className: "bg-blue-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-blue-700 transition-all"
+                        }, "Start Session")
+                    ))
+                )
+            );
+
+            // View: Quiz Mode
+            const Quiz = () => {
+                const q = questionBank[selectedTrack][currentIdx];
+                return e('div', { className: "fixed inset-0 bg-[#f8fafc] z-50 flex flex-col" },
+                    e('div', { className: "h-16 bg-white border-b flex items-center justify-between px-8" },
+                        e('button', { onClick: () => setView('dashboard'), className: "font-bold text-slate-500" }, "← Quit"),
+                        e('div', { className: "font-black" }, `${selectedTrack} Session`),
+                        e('div', { className: "text-slate-400 font-bold" }, `Q ${currentIdx + 1}/${questionBank[selectedTrack].length}`)
+                    ),
+                    e('div', { className: "flex-1 flex items-center justify-center p-6" },
+                        e('div', { className: "max-w-2xl w-full bg-white p-8 md:p-12 rounded-[2.5rem] shadow-xl border" },
+                            e('h2', { className: "text-2xl font-bold mb-8 leading-snug" }, q.q),
                             e('div', { className: "space-y-3" },
-                                qData.options.map((opt, i) => {
-                                    let style = "border-slate-100 hover:border-blue-600 hover:bg-blue-50";
-                                    if (showExplanation) {
-                                        if (i === qData.correct) style = "border-green-500 bg-green-50 text-green-700";
-                                        else if (i === userAnswer) style = "border-red-500 bg-red-50 text-red-700";
-                                        else style = "border-slate-50 opacity-40";
-                                    }
-                                    return e('button', {
-                                        key: i,
-                                        onClick: () => handleAnswer(i),
-                                        className: `w-full text-left p-5 rounded-2xl border-2 transition-all font-semibold ${style}`
-                                    }, opt);
-                                })
+                                q.options.map((opt, i) => e('button', {
+                                    key: i,
+                                    onClick: () => setShowExp(true),
+                                    className: `w-full text-left p-5 rounded-2xl border-2 transition-all font-semibold ${showExp ? (i === q.correct ? 'border-green-500 bg-green-50' : 'border-slate-100 opacity-40') : 'border-slate-100 hover:border-blue-600'}`
+                                }, opt))
                             ),
-                            showExplanation && e('div', { className: "mt-8" },
-                                e('div', { className: "p-6 bg-slate-900 text-white rounded-3xl mb-4" },
-                                    e('span', { className: "text-blue-400 font-bold block mb-2 tracking-widest text-xs" }, "EXPLANATION"),
-                                    e('p', { className: "text-sm leading-relaxed" }, qData.explanation)
-                                ),
+                            showExp && e('div', { className: "mt-8" },
+                                e('div', { className: "p-6 bg-slate-900 text-white rounded-3xl mb-4 text-sm" }, q.explanation),
                                 e('button', { 
-                                    onClick: handleNext,
-                                    className: "w-full py-5 bg-blue-600 text-white rounded-2xl font-bold text-lg hover:bg-blue-700 shadow-xl transition-all"
-                                }, currentIdx + 1 < questionBank[selectedTrack].length ? "Next Question →" : "Finish & See Results")
+                                    onClick: () => {
+                                        if (currentIdx + 1 < questionBank[selectedTrack].length) {
+                                            setCurrentIdx(currentIdx + 1);
+                                            setShowExp(false);
+                                        } else {
+                                            setView('dashboard');
+                                        }
+                                    },
+                                    className: "w-full py-5 bg-blue-600 text-white rounded-2xl font-bold"
+                                }, "Continue")
                             )
                         )
                     )
                 );
-            }
+            };
 
-            if (page === 'results') {
-                return e('div', { className: "min-h-screen flex flex-col items-center justify-center p-6 text-center bg-white" },
-                    e('div', { className: "text-6xl mb-6" }, "🎉"),
-                    e('h1', { className: "text-5xl font-black mb-2" }, "Session Complete"),
-                    e('p', { className: "text-xl text-slate-500 mb-10" }, `You correctly answered ${score} out of ${questionBank[selectedTrack].length} questions.`),
-                    e('button', { onClick: reset, className: "bg-blue-600 text-white px-12 py-5 rounded-2xl font-bold text-xl hover:bg-blue-700" }, "Back to Library")
-                );
-            }
-
-            return e('div', { className: "min-h-screen flex flex-col items-center justify-center p-6 bg-white" },
-                e('div', { className: "w-20 h-20 bg-blue-600 rounded-[2rem] flex items-center justify-center mb-8 shadow-2xl shadow-blue-100" },
-                    e('span', { className: "text-white text-4xl" }, "✚")
-                ),
-                e('h1', { className: "text-6xl md:text-7xl font-black tracking-tighter mb-4 text-slate-900" }, "OpenMedPrep"),
-                e('p', { className: "text-xl text-slate-500 mb-12 max-w-md text-center leading-relaxed" }, "High-yield medical vignettes for board mastery. Select a track to begin."),
-                e('div', { className: "grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-2xl" },
-                    [
-                        { id: 'USMLE', title: 'USMLE Step 2', sub: 'High-Yield Clinical Cases' },
-                        { id: 'UKMLA', title: 'UKMLA / PLAB', sub: 'Clinical Assessment Track' }
-                    ].map(track => 
-                        e('button', {
-                            key: track.id,
-                            onClick: () => { setSelectedTrack(track.id); setPage('quiz'); },
-                            className: "p-8 border-2 border-slate-100 rounded-[2.5rem] text-left hover:border-blue-600 hover:shadow-2xl transition-all group bg-white"
-                        },
-                            e('div', { className: "text-blue-600 font-bold mb-1" }, track.id),
-                            e('div', { className: "text-2xl font-black text-slate-900 group-hover:text-blue-600" }, track.title),
-                            e('div', { className: "text-slate-400 font-semibold" }, track.sub)
-                        )
-                    )
+            return e('div', { className: "min-h-screen flex flex-col" },
+                e(Header),
+                e('div', { className: "flex flex-1" },
+                    e(Sidebar),
+                    view === 'dashboard' && e(Dashboard),
+                    view === 'qbank' && e(QBank),
+                    view === 'library' && e('main', { className: "p-8" }, e('h2', { className: "text-3xl font-bold" }, "Library Coming Soon")),
+                    view === 'quiz' && e(Quiz)
                 )
             );
         };
