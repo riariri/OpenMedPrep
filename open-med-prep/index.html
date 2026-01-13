@@ -8,23 +8,26 @@
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 </head>
-<body class="bg-white">
+<body class="bg-slate-50">
     <div id="root"></div>
     <script>
         const e = React.createElement;
         const { useState } = React;
         const App = () => {
-            const [activePage, setActivePage] = useState('home');
-            if (activePage === 'quiz') {
-                return e('div', { className: "p-10" }, 
-                    e('h1', { className: "text-2xl font-bold mb-4" }, "Question 1"),
-                    e('p', null, "Vignette: A 65-year-old male with sudden vision loss..."),
-                    e('button', { onClick: () => setActivePage('home'), className: "mt-4 bg-blue-600 text-white p-2 rounded" }, "Go Back")
+            const [view, setView] = useState('home');
+            if (view === 'quiz') {
+                return e('div', { className: "min-h-screen p-6 flex flex-col items-center justify-center text-center" },
+                    e('div', { className: "bg-white p-10 rounded-3xl shadow-xl max-w-xl w-full" },
+                        e('h2', { className: "text-blue-600 font-bold mb-4" }, "USMLE Step 2 CK"),
+                        e('p', { className: "text-xl font-bold mb-6" }, "A 65-year-old male presents with sudden monocular vision loss. Diagnosis?"),
+                        e('button', { onClick: () => setView('home'), className: "bg-black text-white px-6 py-2 rounded-xl" }, "Back Home")
+                    )
                 );
             }
-            return e('div', { className: "p-10" },
-                e('h1', { className: "text-5xl font-black mb-4" }, "OpenMedPrep"),
-                e('button', { onClick: () => setActivePage('quiz'), className: "bg-blue-600 text-white p-4 rounded-xl" }, "Start USMLE Prep")
+            return e('div', { className: "min-h-screen flex flex-col items-center justify-center text-center p-6" },
+                e('h1', { className: "text-6xl font-black mb-4" }, "OpenMedPrep"),
+                e('p', { className: "text-xl text-slate-500 mb-8" }, "Your actual medical prep site is now live."),
+                e('button', { onClick: () => setView('quiz'), className: "bg-blue-600 text-white px-8 py-4 rounded-2xl font-bold" }, "Start Learning")
             );
         };
         const root = ReactDOM.createRoot(document.getElementById('root'));
