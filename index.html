@@ -3,162 +3,316 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OpenMedPrep | Professional Medical Board Mastery</title>
+    <title>OpenMedPrep - Premium Board Review</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/lucide@0.321.0"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-        body { font-family: 'Plus Jakarta Sans', sans-serif; letter-spacing: -0.01em; }
-        .nav-item-active { background: #eff6ff; color: #2563eb; border-right: 4px solid #2563eb; }
+        body { font-family: 'Plus Jakarta Sans', sans-serif; overflow: hidden; background-color: #f8fafc; }
+        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .icon-container svg { width: 100%; height: 100%; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        .glass-panel { background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(12px); border: 1px solid rgba(226, 232, 240, 0.8); }
+        .timer-low { color: #ef4444; animation: pulse 1s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
     </style>
 </head>
-<body class="bg-[#f8fafc] text-slate-900">
+<body>
     <div id="root"></div>
 
     <script>
-        const e = React.createElement;
-        const { useState } = React;
+        const { useState, useEffect, useRef, useMemo } = React;
+
+        const Icon = ({ name, size = 20, className = "", fill = "none", color = "currentColor" }) => {
+            const iconRef = useRef(null);
+            useEffect(() => {
+                if (window.lucide && iconRef.current) {
+                    iconRef.current.innerHTML = '';
+                    const iconAttr = { 'data-lucide': name.toLowerCase().replace(/([a-z0-9])([A-Z])/g, '$1-$2'), 'stroke-width': 2, 'stroke': color, 'fill': fill };
+                    const iconElement = document.createElement('i');
+                    Object.entries(iconAttr).forEach(([key, value]) => iconElement.setAttribute(key, value));
+                    iconElement.style.width = `${size}px`; iconElement.style.height = `${size}px`;
+                    iconRef.current.appendChild(iconElement);
+                    window.lucide.createIcons();
+                }
+            }, [name, size, fill, color]);
+            return React.createElement('span', { ref: iconRef, className: `inline-flex items-center justify-center icon-container ${className}`, style: { width: size, height: size } });
+        };
 
         const App = () => {
-            const [view, setView] = useState('dashboard'); // dashboard, qbank, library, quiz
-            const [selectedTrack, setSelectedTrack] = useState(null);
-            const [currentIdx, setCurrentIdx] = useState(0);
-            const [score, setScore] = useState(0);
-            const [showExp, setShowExp] = useState(false);
+            const [activePage, setActivePage] = useState('home');
+            const [selectedExam, setSelectedExam] = useState(null);
+            const [selectedMock, setSelectedMock] = useState(null);
+            const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
+            const [answers, setAnswers] = useState({});
+            const [isTimed, setIsTimed] = useState(false);
+            const [timeLeft, setTimeLeft] = useState(0);
+            const [flaggedQuestions, setFlaggedQuestions] = useState([]);
+            const [showResults, setShowResults] = useState(false);
+            const [searchQuery, setSearchQuery] = useState('');
+            const [showLabs, setShowLabs] = useState(false);
 
-            const questionBank = {
-                USMLE: [
-                    { q: "65yo M, sudden monocular vision loss, cherry-red spot.", options: ["CRVO", "CRAO", "Retinal Detachment", "Glaucoma"], correct: 1, explanation: "CRAO is a medical emergency requiring immediate ocular massage and ophthalmology consult." },
-                    { q: "30yo F, malar rash, joint pain, proteinuria.", options: ["Rheumatoid Arthritis", "SLE", "Scleroderma", "Dermatomyositis"], correct: 1, explanation: "Systemic Lupus Erythematosus (SLE) presents with multi-system involvement and anti-dsDNA/anti-Smith antibodies." }
-                ],
-                UKMLA: [
-                    { q: "Epigastric pain radiating to back, history of gallstones.", options: ["Pancreatitis", "Biliary Colic", "Peptic Ulcer", "MI"], correct: 0, explanation: "Acute pancreatitis is often secondary to gallstones or alcohol. Amylase/Lipase will be >3x normal." }
-                ]
+            // COMPREHENSIVE QUESTION GENERATOR (Generating ~150 questions total across 3 categories)
+            const generateQuestions = (prefix, count, types) => {
+                return Array.from({ length: count }, (_, i) => {
+                    const type = types[i % types.length];
+                    return {
+                        id: `${prefix}-${i}`,
+                        vignette: `${type.scenario} The patient is a ${20 + (i % 60)}-year-old with ${type.symptom}. Vital signs show HR ${80 + (i % 40)}, BP ${110 + (i % 30)}/70, Temp ${37 + (i % 2)}.`,
+                        options: type.options,
+                        correctAnswer: type.correctIdx,
+                        explanation: `This case highlights ${type.pearl}. In medical boards, always look for ${type.clue} to differentiate from other diagnoses.`,
+                        category: type.label
+                    };
+                });
             };
 
-            // Shared Components
-            const Header = () => e('header', { className: "h-16 border-b bg-white flex items-center justify-between px-8 sticky top-0 z-10" },
-                e('div', { className: "flex items-center gap-2" },
-                    e('div', { className: "w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold" }, "+"),
-                    e('span', { className: "font-extrabold text-xl tracking-tighter" }, "OpenMedPrep")
-                ),
-                e('div', { className: "flex gap-4 items-center" },
-                    e('div', { className: "w-8 h-8 bg-slate-200 rounded-full" })
-                )
-            );
+            const IM_TYPES = [
+                { label: "Cardiology", scenario: "A patient presents with sudden tearing chest pain radiating to the back.", symptom: "a BP differential between arms", options: ["Aortic Dissection", "MI", "PE", "Pneumothorax"], correctIdx: 0, pearl: "the importance of the widened mediastinum on CXR", clue: "asymmetric pulses" },
+                { label: "Endocrine", scenario: "A patient presents with polyuria, polydipsia, and weight loss.", symptom: "a fruity odor on their breath", options: ["Type 2 Diabetes", "DKA", "Diabetes Insipidus", "SIADH"], correctIdx: 1, pearl: "insulin deficiency leading to ketone production", clue: "anion gap acidosis" },
+                { label: "Pulmonary", scenario: "A patient presents with acute onset shortness of breath after a long-haul flight.", symptom: "pleuritic chest pain", options: ["Pneumonia", "PE", "Asthma", "COPD"], correctIdx: 1, pearl: "Virchow's triad of stasis, hypercoagulability, and injury", clue: "S1Q3T3 on ECG" }
+            ];
 
-            const Sidebar = () => e('aside', { className: "w-64 border-r h-[calc(100vh-64px)] bg-white hidden md:block" },
-                e('nav', { className: "py-6" },
-                    [
-                        { id: 'dashboard', label: 'Dashboard', icon: '📊' },
-                        { id: 'qbank', label: 'Question Bank', icon: '📝' },
-                        { id: 'library', label: 'High-Yield Library', icon: '📚' },
-                    ].map(item => e('button', {
-                        key: item.id,
-                        onClick: () => setView(item.id),
-                        className: `w-full text-left px-6 py-4 flex items-center gap-3 font-semibold transition-all ${view === item.id ? 'nav-item-active' : 'text-slate-500 hover:bg-slate-50'}`
-                    }, e('span', null, item.icon), item.label))
-                )
-            );
+            const SURG_TYPES = [
+                { label: "Trauma", scenario: "Following a motor vehicle accident, a patient has tracheal deviation and absent breath sounds.", symptom: "distended neck veins", options: ["Tension Pneumothorax", "Hemothorax", "Cardiac Tamponade", "Flail Chest"], correctIdx: 0, pearl: "immediate needle decompression", clue: "hemodynamic instability" },
+                { label: "Acute Abdomen", scenario: "A 25-year-old presents with periumbilical pain that migrated to the RLQ.", symptom: "rebound tenderness at McBurney's point", options: ["Cholecystitis", "Diverticulitis", "Appendicitis", "Small Bowel Obstruction"], correctIdx: 2, pearl: "clinical diagnosis and surgical consultation", clue: "Rovsing sign" }
+            ];
 
-            // View: Dashboard
-            const Dashboard = () => e('main', { className: "p-8 w-full overflow-y-auto" },
-                e('h2', { className: "text-3xl font-extrabold mb-2" }, "Welcome back, Doctor"),
-                e('p', { className: "text-slate-500 mb-8" }, "You have completed 12% of your USMLE track this week."),
-                e('div', { className: "grid grid-cols-1 md:grid-cols-3 gap-6 mb-8" },
-                    [{l: 'Accuracy', v: '84%', c: 'text-green-600'}, {l: 'Questions Done', v: '142', c: 'text-blue-600'}, {l: 'Global Rank', v: '#1,204', c: 'text-purple-600'}].map(s => 
-                        e('div', { key: s.l, className: "bg-white p-6 rounded-2xl shadow-sm border" },
-                            e('div', { className: "text-sm font-bold text-slate-400 uppercase tracking-wider" }, s.l),
-                            e('div', { className: `text-3xl font-black ${s.c}` }, s.v)
-                        )
-                    )
-                ),
-                e('h3', { className: "text-xl font-bold mb-4" }, "Continue Learning"),
-                e('div', { className: "grid grid-cols-1 md:grid-cols-2 gap-4" },
-                    ['USMLE', 'UKMLA'].map(t => e('button', {
-                        key: t,
-                        onClick: () => { setSelectedTrack(t); setView('qbank'); },
-                        className: "bg-white p-6 rounded-2xl border text-left hover:border-blue-500 transition-all group"
-                    },
-                        e('div', { className: "text-blue-600 font-bold text-sm mb-1" }, t),
-                        e('div', { className: "text-xl font-bold mb-2" }, `${t} Step 2 Clinical Knowledge`),
-                        e('div', { className: "w-full bg-slate-100 h-2 rounded-full overflow-hidden" }, 
-                            e('div', { className: "bg-blue-600 h-full w-1/3" })
-                        )
-                    ))
-                )
-            );
+            const MOCKS = useMemo(() => ({
+                "Internal Medicine": {
+                    "High-Yield Block A": generateQuestions("im-a", 50, IM_TYPES),
+                    "High-Yield Block B": generateQuestions("im-b", 50, IM_TYPES)
+                },
+                "Surgery": {
+                    "Trauma & Critical Care": generateQuestions("surg-a", 50, SURG_TYPES),
+                    "General Surgery Mastery": generateQuestions("surg-b", 50, SURG_TYPES)
+                }
+            }), []);
 
-            // View: QBank Selector
-            const QBank = () => e('main', { className: "p-8 w-full" },
-                e('h2', { className: "text-3xl font-extrabold mb-8" }, "Question Bank"),
-                e('div', { className: "space-y-4 max-w-3xl" },
-                    Object.keys(questionBank).map(track => e('div', { key: track, className: "bg-white rounded-2xl border p-6 flex items-center justify-between" },
-                        e('div', null,
-                            e('h4', { className: "text-xl font-bold" }, `${track} Track`),
-                            e('p', { className: "text-slate-500" }, `${questionBank[track].length} high-yield vignettes available.`)
-                        ),
-                        e('button', {
-                            onClick: () => { setSelectedTrack(track); setCurrentIdx(0); setScore(0); setView('quiz'); },
-                            className: "bg-blue-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-blue-700 transition-all"
-                        }, "Start Session")
-                    ))
-                )
-            );
+            const LAB_VALUES = [
+                { name: "Sodium", range: "135–145 mEq/L" },
+                { name: "Potassium", range: "3.5–5.0 mEq/L" },
+                { name: "Hemoglobin (M)", range: "13.5–17.5 g/dL" },
+                { name: "WBC Count", range: "4,500–11,000/mm³" },
+                { name: "Creatinine", range: "0.7–1.3 mg/dL" }
+            ];
 
-            // View: Quiz Mode
-            const Quiz = () => {
-                const q = questionBank[selectedTrack][currentIdx];
-                return e('div', { className: "fixed inset-0 bg-[#f8fafc] z-50 flex flex-col" },
-                    e('div', { className: "h-16 bg-white border-b flex items-center justify-between px-8" },
-                        e('button', { onClick: () => setView('dashboard'), className: "font-bold text-slate-500" }, "← Quit"),
-                        e('div', { className: "font-black" }, `${selectedTrack} Session`),
-                        e('div', { className: "text-slate-400 font-bold" }, `Q ${currentIdx + 1}/${questionBank[selectedTrack].length}`)
-                    ),
-                    e('div', { className: "flex-1 flex items-center justify-center p-6" },
-                        e('div', { className: "max-w-2xl w-full bg-white p-8 md:p-12 rounded-[2.5rem] shadow-xl border" },
-                            e('h2', { className: "text-2xl font-bold mb-8 leading-snug" }, q.q),
-                            e('div', { className: "space-y-3" },
-                                q.options.map((opt, i) => e('button', {
-                                    key: i,
-                                    onClick: () => setShowExp(true),
-                                    className: `w-full text-left p-5 rounded-2xl border-2 transition-all font-semibold ${showExp ? (i === q.correct ? 'border-green-500 bg-green-50' : 'border-slate-100 opacity-40') : 'border-slate-100 hover:border-blue-600'}`
-                                }, opt))
+            useEffect(() => {
+                let timer;
+                if (activePage === 'quiz' && isTimed && timeLeft > 0 && !showResults) {
+                    timer = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
+                } else if (timeLeft === 0 && isTimed && activePage === 'quiz') {
+                    setShowResults(true);
+                }
+                return () => clearInterval(timer);
+            }, [activePage, isTimed, timeLeft, showResults]);
+
+            const formatTime = (s) => {
+                const mins = Math.floor(s / 60);
+                const secs = s % 60;
+                return `${mins}:${secs.toString().padStart(2, '0')}`;
+            };
+
+            const startExam = (examKey, mockName) => {
+                setSelectedExam(examKey);
+                setSelectedMock(mockName);
+                setTimeLeft(MOCKS[examKey][mockName].length * 90);
+                setAnswers({});
+                setFlaggedQuestions([]);
+                setCurrentQuestionIdx(0);
+                setShowResults(false);
+                setActivePage('quiz');
+            };
+
+            if (activePage === 'quiz') {
+                const questions = MOCKS[selectedExam][selectedMock];
+                const q = questions[currentQuestionIdx];
+                const isFlagged = flaggedQuestions.includes(q.id);
+
+                if (showResults) {
+                    const score = questions.reduce((acc, curr, idx) => acc + (answers[idx] === curr.correctAnswer ? 1 : 0), 0);
+                    return React.createElement('div', { className: "min-h-screen bg-slate-50 p-8 overflow-y-auto custom-scrollbar" },
+                        React.createElement('div', { className: "max-w-4xl mx-auto space-y-6 pb-20" },
+                            React.createElement('div', { className: "bg-white p-10 rounded-[2.5rem] shadow-xl text-center border border-slate-100" },
+                                React.createElement('h1', { className: "text-3xl font-black mb-2" }, "Performance Report"),
+                                React.createElement('p', { className: "text-slate-400 font-medium mb-8" }, `${selectedMock} • Review Mode`),
+                                React.createElement('div', { className: "flex justify-center gap-16" },
+                                    React.createElement('div', null, React.createElement('p', { className: "text-5xl font-black text-blue-600" }, `${Math.round((score/questions.length)*100)}%`), React.createElement('p', { className: "text-[10px] font-black uppercase text-slate-400 mt-2" }, "Accuracy")),
+                                    React.createElement('div', null, React.createElement('p', { className: "text-5xl font-black text-slate-800" }, `${score}`), React.createElement('p', { className: "text-[10px] font-black uppercase text-slate-400 mt-2" }, "Correct")),
+                                    React.createElement('div', null, React.createElement('p', { className: "text-5xl font-black text-slate-300" }, `${questions.length - score}`), React.createElement('p', { className: "text-[10px] font-black uppercase text-slate-400 mt-2" }, "Incorrect"))
+                                ),
+                                React.createElement('button', { onClick: () => setActivePage('home'), className: "mt-10 bg-slate-900 text-white px-10 py-4 rounded-2xl font-bold hover:bg-black transition-all" }, "Back to Dashboard")
                             ),
-                            showExp && e('div', { className: "mt-8" },
-                                e('div', { className: "p-6 bg-slate-900 text-white rounded-3xl mb-4 text-sm" }, q.explanation),
-                                e('button', { 
-                                    onClick: () => {
-                                        if (currentIdx + 1 < questionBank[selectedTrack].length) {
-                                            setCurrentIdx(currentIdx + 1);
-                                            setShowExp(false);
-                                        } else {
-                                            setView('dashboard');
-                                        }
-                                    },
-                                    className: "w-full py-5 bg-blue-600 text-white rounded-2xl font-bold"
-                                }, "Continue")
+                            questions.map((item, idx) => React.createElement('div', { key: idx, className: "bg-white p-8 rounded-3xl border border-slate-100 shadow-sm" },
+                                React.createElement('div', { className: "flex items-center justify-between mb-4" },
+                                    React.createElement('span', { className: "text-xs font-black text-slate-300 uppercase" }, `Question ${idx + 1}`),
+                                    answers[idx] === item.correctAnswer 
+                                        ? React.createElement('span', { className: "text-emerald-500 font-bold text-sm bg-emerald-50 px-3 py-1 rounded-full" }, "Correct")
+                                        : React.createElement('span', { className: "text-rose-500 font-bold text-sm bg-rose-50 px-3 py-1 rounded-full" }, "Incorrect")
+                                ),
+                                React.createElement('p', { className: "font-semibold text-slate-800 mb-6 leading-relaxed" }, item.vignette),
+                                React.createElement('div', { className: "p-5 bg-blue-50/50 rounded-2xl border border-blue-100" },
+                                    React.createElement('p', { className: "text-sm text-slate-700" }, React.createElement('span', { className: "font-black text-blue-600 uppercase text-[10px] block mb-1" }, "Educational Objective"), item.explanation)
+                                )
+                            ))
+                        )
+                    );
+                }
+
+                return React.createElement('div', { className: "h-screen bg-white flex flex-col relative" },
+                    // TOP BAR
+                    React.createElement('div', { className: "bg-slate-900 text-white p-5 flex items-center justify-between z-20" },
+                        React.createElement('div', { className: "flex items-center gap-5" },
+                            React.createElement('button', { onClick: () => setActivePage('home'), className: "text-white/40 hover:text-white" }, React.createElement(Icon, { name: "X" })),
+                            React.createElement('div', { className: "h-8 w-px bg-white/10" }),
+                            React.createElement('div', null, 
+                                React.createElement('p', { className: "text-[9px] font-black uppercase text-blue-400 tracking-tighter" }, selectedMock),
+                                React.createElement('h2', { className: "text-sm font-bold" }, `Q${currentQuestionIdx + 1} / ${questions.length}`)
                             )
+                        ),
+                        React.createElement('div', { className: "flex items-center gap-6" },
+                            React.createElement('button', { onClick: () => setShowLabs(!showLabs), className: "text-xs font-black uppercase bg-white/10 px-4 py-2 rounded-lg hover:bg-white/20" }, "Lab Values"),
+                            isTimed && React.createElement('div', { className: `font-mono text-lg font-bold ${timeLeft < 300 ? 'timer-low' : ''}` }, formatTime(timeLeft)),
+                            React.createElement('button', { onClick: () => setFlaggedQuestions(f => f.includes(q.id) ? f.filter(id => id !== q.id) : [...f, q.id]), className: `flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-xs ${isFlagged ? 'bg-orange-500' : 'bg-white/5 text-white/30'}` }, React.createElement(Icon, { name: "Bookmark", size: 14, fill: isFlagged ? "white" : "none" }), isFlagged ? "Flagged" : "Flag")
+                        )
+                    ),
+                    // LAB PANEL OVERLAY
+                    showLabs && React.createElement('div', { className: "absolute top-20 right-8 w-80 bg-white shadow-2xl rounded-3xl border border-slate-200 p-6 z-50 animate-fade-in" },
+                        React.createElement('div', { className: "flex justify-between items-center mb-4" }, React.createElement('h3', { className: "font-black text-sm uppercase" }, "Standard Labs"), React.createElement('button', { onClick: () => setShowLabs(false) }, React.createElement(Icon, { name: "X", size: 16 }))),
+                        React.createElement('div', { className: "space-y-3" }, LAB_VALUES.map(l => React.createElement('div', { key: l.name, className: "flex justify-between text-xs py-2 border-b border-slate-50" }, React.createElement('span', { className: "text-slate-500 font-medium" }, l.name), React.createElement('span', { className: "font-bold" }, l.range))))
+                    ),
+                    // MAIN CONTENT
+                    React.createElement('div', { className: "flex-1 overflow-y-auto p-12 lg:px-64 lg:py-20" },
+                        React.createElement('div', { className: "max-w-4xl mx-auto" },
+                            React.createElement('p', { className: "text-2xl font-bold text-slate-800 leading-relaxed mb-12" }, q.vignette),
+                            React.createElement('div', { className: "space-y-3" },
+                                q.options.map((opt, idx) => React.createElement('button', {
+                                    key: idx,
+                                    onClick: () => setAnswers({...answers, [currentQuestionIdx]: idx}),
+                                    className: `w-full text-left p-6 rounded-2xl border-2 transition-all flex items-center gap-5 ${answers[currentQuestionIdx] === idx ? 'border-blue-600 bg-blue-50/50' : 'border-slate-100 hover:border-slate-300 bg-white'}`
+                                },
+                                    React.createElement('div', { className: `w-10 h-10 rounded-xl flex items-center justify-center font-bold ${answers[currentQuestionIdx] === idx ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}` }, String.fromCharCode(65 + idx)),
+                                    React.createElement('span', { className: "font-bold text-slate-700" }, opt)
+                                ))
+                            )
+                        )
+                    ),
+                    // FOOTER
+                    React.createElement('div', { className: "p-6 border-t border-slate-100 bg-white flex justify-between items-center shadow-lg" },
+                        React.createElement('button', { onClick: () => setCurrentQuestionIdx(prev => prev - 1), disabled: currentQuestionIdx === 0, className: "px-8 py-3 font-bold text-slate-400 disabled:opacity-0" }, "Previous"),
+                        React.createElement('div', { className: "flex gap-4" },
+                            currentQuestionIdx + 1 === questions.length ? 
+                            React.createElement('button', { onClick: () => setShowResults(true), className: "bg-blue-600 text-white px-10 py-4 rounded-2xl font-black shadow-xl shadow-blue-100" }, "Finish Exam") :
+                            React.createElement('button', { onClick: () => setCurrentQuestionIdx(prev => prev + 1), className: "bg-slate-900 text-white px-12 py-4 rounded-2xl font-black hover:bg-black" }, "Next Question")
                         )
                     )
                 );
-            };
+            }
 
-            return e('div', { className: "min-h-screen flex flex-col" },
-                e(Header),
-                e('div', { className: "flex flex-1" },
-                    e(Sidebar),
-                    view === 'dashboard' && e(Dashboard),
-                    view === 'qbank' && e(QBank),
-                    view === 'library' && e('main', { className: "p-8" }, e('h2', { className: "text-3xl font-bold" }, "Library Coming Soon")),
-                    view === 'quiz' && e(Quiz)
+            return React.createElement('div', { className: "min-h-screen flex bg-slate-50/50" },
+                // SIDEBAR
+                React.createElement('aside', { className: "w-72 bg-white border-r border-slate-200 hidden lg:flex flex-col" },
+                    React.createElement('div', { className: "p-8 mb-4" },
+                        React.createElement('div', { className: "flex items-center gap-3" },
+                            React.createElement('div', { className: "w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-200" }, React.createElement(Icon, { name: "Stethoscope", fill: "white" })),
+                            React.createElement('span', { className: "font-black text-xl tracking-tighter" }, "OpenMedPrep")
+                        )
+                    ),
+                    React.createElement('nav', { className: "px-4 space-y-1" },
+                        [
+                            { id: 'home', icon: 'Layout', label: 'Dashboard' },
+                            { id: 'bank', icon: 'Database', label: 'Question Bank' },
+                            { id: 'stats', icon: 'BarChart2', label: 'Analytics' },
+                            { id: 'library', icon: 'BookOpen', label: 'Study Library' }
+                        ].map(item => React.createElement('button', {
+                            key: item.id,
+                            onClick: () => setActivePage(item.id),
+                            className: `w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-bold transition-all ${activePage === item.id ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'text-slate-400 hover:text-slate-900'}`
+                        }, React.createElement(Icon, { name: item.icon, color: activePage === item.id ? "white" : "currentColor" }), item.label))
+                    ),
+                    React.createElement('div', { className: "mt-auto p-6" },
+                        React.createElement('div', { className: "bg-slate-900 rounded-3xl p-6 text-white" },
+                            React.createElement('p', { className: "text-xs font-black text-white/40 uppercase mb-4" }, "Weekly Goal"),
+                            React.createElement('div', { className: "flex justify-between items-end mb-2" }, React.createElement('span', { className: "text-2xl font-black" }, "64%"), React.createElement('span', { className: "text-[10px] text-white/40" }, "320 / 500 Qs")),
+                            React.createElement('div', { className: "h-2 w-full bg-white/10 rounded-full overflow-hidden" }, React.createElement('div', { className: "h-full bg-blue-500", style: { width: '64%' } }))
+                        )
+                    )
+                ),
+                // MAIN DASHBOARD
+                React.createElement('main', { className: "flex-1 h-screen overflow-y-auto custom-scrollbar" },
+                    React.createElement('div', { className: "max-w-6xl mx-auto p-8 lg:p-12 pb-32" },
+                        React.createElement('header', { className: "flex flex-col md:flex-row md:items-end justify-between gap-6 mb-16 animate-fade-in" },
+                            React.createElement('div', null,
+                                React.createElement('h1', { className: "text-5xl font-black tracking-tighter mb-2" }, "Dashboard"),
+                                React.createElement('p', { className: "text-slate-400 text-lg font-medium" }, "Focus on Internal Medicine today.")
+                            ),
+                            React.createElement('div', { className: "flex items-center gap-4 bg-white p-3 px-6 rounded-3xl shadow-sm border border-slate-200" },
+                                React.createElement('span', { className: "font-black text-xs text-slate-400 uppercase tracking-widest" }, "Simulation Mode"),
+                                React.createElement('button', { onClick: () => setIsTimed(!isTimed), className: `w-12 h-7 rounded-full relative transition-all ${isTimed ? 'bg-blue-600' : 'bg-slate-200'}` }, 
+                                    React.createElement('div', { className: `absolute top-1 w-5 h-5 bg-white rounded-full transition-all ${isTimed ? 'left-6' : 'left-1'}` })
+                                )
+                            )
+                        ),
+
+                        React.createElement('div', { className: "grid grid-cols-1 lg:grid-cols-3 gap-12" },
+                            React.createElement('div', { className: "lg:col-span-2 space-y-12" },
+                                Object.entries(MOCKS).map(([examKey, mocks], sectionIdx) => (
+                                    React.createElement('section', { key: examKey, className: "space-y-6 animate-fade-in", style: { animationDelay: `${sectionIdx * 0.1}s` } },
+                                        React.createElement('div', { className: "flex items-center justify-between" },
+                                            React.createElement('h3', { className: "text-xs font-black text-slate-400 uppercase tracking-[0.3em]" }, examKey),
+                                            React.createElement('span', { className: "text-blue-600 text-xs font-black uppercase" }, "Browse Chapter")
+                                        ),
+                                        React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-2 gap-6" },
+                                            Object.keys(mocks).map(name => (
+                                                React.createElement('div', { key: name, className: "bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm hover:shadow-xl transition-all group cursor-pointer", onClick: () => startExam(examKey, name) },
+                                                    React.createElement('div', { className: "flex justify-between items-start mb-6" },
+                                                        React.createElement('div', { className: "w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 group-hover:bg-blue-600 group-hover:text-white transition-all" }, React.createElement(Icon, { name: "ClipboardCheck" })),
+                                                        React.createElement('div', { className: "flex flex-col items-end" }, 
+                                                            React.createElement('span', { className: "text-[10px] font-black text-slate-300 uppercase" }, "Length"),
+                                                            React.createElement('span', { className: "text-sm font-bold text-slate-600" }, `${mocks[name].length} Qs`)
+                                                        )
+                                                    ),
+                                                    React.createElement('h4', { className: "text-xl font-black mb-1 leading-tight" }, name),
+                                                    React.createElement('p', { className: "text-sm text-slate-400 font-medium mb-8" }, "High-yield vignettes covering core specialty concepts."),
+                                                    React.createElement('div', { className: "flex items-center gap-2 text-blue-600 font-black text-xs uppercase" }, "Launch Test", React.createElement(Icon, { name: "ChevronRight", size: 14 }))
+                                                )
+                                            ))
+                                        )
+                                    )
+                                ))
+                            ),
+                            // SECONDARY SIDEBAR
+                            React.createElement('div', { className: "space-y-12" },
+                                React.createElement('div', { className: "bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm" },
+                                    React.createElement('h3', { className: "font-black text-sm uppercase text-slate-400 mb-6 tracking-widest" }, "Performance Matrix"),
+                                    React.createElement('div', { className: "space-y-6" },
+                                        ['Cardiology', 'Surgery', 'Endocrine'].map((subj, idx) => (
+                                            React.createElement('div', { key: subj },
+                                                React.createElement('div', { className: "flex justify-between text-xs font-bold mb-2" }, React.createElement('span', null, subj), React.createElement('span', { className: "text-slate-400" }, `${80 - idx * 10}%`)),
+                                                React.createElement('div', { className: "h-1.5 w-full bg-slate-100 rounded-full" }, React.createElement('div', { className: "h-full bg-slate-900 rounded-full", style: { width: `${80 - idx * 10}%` } }))
+                                            )
+                                        ))
+                                    )
+                                ),
+                                React.createElement('div', { className: "bg-blue-600 p-8 rounded-[2.5rem] text-white shadow-2xl shadow-blue-200" },
+                                    React.createElement('h3', { className: "text-xl font-black mb-4 leading-tight" }, "Ready for a full Mock?"),
+                                    React.createElement('p', { className: "text-blue-100 text-sm mb-6 leading-relaxed" }, "Simulate a real 8-hour testing day with our comprehensive randomized blocks."),
+                                    React.createElement('button', { className: "w-full py-4 bg-white text-blue-600 rounded-2xl font-black text-sm uppercase shadow-lg shadow-blue-800/20" }, "Generate Full Mock")
+                                )
+                            )
+                        )
+                    )
                 )
             );
         };
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(e(App));
+        root.render(React.createElement(App));
     </script>
 </body>
 </html>
