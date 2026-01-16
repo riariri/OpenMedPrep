@@ -3,316 +3,437 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OpenMedPrep - Premium Board Review</title>
+    <title>OpenMedPrep | The Standard in Medical Board Review</title>
+    
+    <!-- Core Dependencies -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@0.321.0"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+    <!-- Fonts & Styles -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Plus Jakarta Sans', sans-serif; overflow: hidden; background-color: #f8fafc; }
-        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-        .icon-container svg { width: 100%; height: 100%; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
-        .glass-panel { background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(12px); border: 1px solid rgba(226, 232, 240, 0.8); }
-        .timer-low { color: #ef4444; animation: pulse 1s infinite; }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+        body { font-family: 'Inter', sans-serif; background-color: #F8FAFC; color: #0F172A; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .glass-panel { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(12px); border: 1px solid rgba(226, 232, 240, 0.8); }
+        .chart-container { position: relative; height: 300px; width: 100%; }
+        @keyframes pulse-soft { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+        .animate-pulse-soft { animation: pulse-soft 2s infinite; }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
-    <script>
+    <script type="text/babel">
+        /** * --- CONFIGURATION & SETUP ---
+         */
         const { useState, useEffect, useRef, useMemo } = React;
 
-        const Icon = ({ name, size = 20, className = "", fill = "none", color = "currentColor" }) => {
-            const iconRef = useRef(null);
-            useEffect(() => {
-                if (window.lucide && iconRef.current) {
-                    iconRef.current.innerHTML = '';
-                    const iconAttr = { 'data-lucide': name.toLowerCase().replace(/([a-z0-9])([A-Z])/g, '$1-$2'), 'stroke-width': 2, 'stroke': color, 'fill': fill };
-                    const iconElement = document.createElement('i');
-                    Object.entries(iconAttr).forEach(([key, value]) => iconElement.setAttribute(key, value));
-                    iconElement.style.width = `${size}px`; iconElement.style.height = `${size}px`;
-                    iconRef.current.appendChild(iconElement);
-                    window.lucide.createIcons();
-                }
-            }, [name, size, fill, color]);
-            return React.createElement('span', { ref: iconRef, className: `inline-flex items-center justify-center icon-container ${className}`, style: { width: size, height: size } });
+        // Firebase Init (Graceful Fallback)
+        let auth, db;
+        try {
+            if (typeof firebase !== 'undefined' && typeof __firebase_config !== 'undefined') {
+                firebase.initializeApp(JSON.parse(__firebase_config));
+                auth = firebase.auth();
+                db = firebase.firestore();
+            }
+        } catch (e) { console.warn("Firebase not initialized - running in offline mode"); }
+
+        /**
+         * --- ICON SYSTEM (Inline SVG for reliability) ---
+         */
+        const Icon = ({ name, size = 20, className = "", fill = "none" }) => {
+            const icons = {
+                Activity: <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />,
+                BookOpen: <><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></>,
+                Layout: <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />,
+                Check: <polyline points="20 6 9 17 4 12" />,
+                X: <><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></>,
+                ChevronRight: <polyline points="9 18 15 12 9 6" />,
+                ChevronLeft: <polyline points="15 18 9 12 15 6" />,
+                Clock: <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />,
+                Flag: <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15" />,
+                Play: <polygon points="5 3 19 12 5 21 5 3" />,
+                Search: <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />,
+                BarChart: <line x1="12" y1="20" x2="12" y2="10" /><line x1="18" y1="20" x2="18" y2="4" /><line x1="6" y1="20" x2="6" y2="16" />,
+                Lock: <rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            };
+            return (
+                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                    {icons[name] || <circle cx="12" cy="12" r="10" />}
+                </svg>
+            );
         };
 
-        const App = () => {
-            const [activePage, setActivePage] = useState('home');
-            const [selectedExam, setSelectedExam] = useState(null);
-            const [selectedMock, setSelectedMock] = useState(null);
-            const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
-            const [answers, setAnswers] = useState({});
-            const [isTimed, setIsTimed] = useState(false);
-            const [timeLeft, setTimeLeft] = useState(0);
-            const [flaggedQuestions, setFlaggedQuestions] = useState([]);
-            const [showResults, setShowResults] = useState(false);
-            const [searchQuery, setSearchQuery] = useState('');
-            const [showLabs, setShowLabs] = useState(false);
-
-            // COMPREHENSIVE QUESTION GENERATOR (Generating ~150 questions total across 3 categories)
-            const generateQuestions = (prefix, count, types) => {
-                return Array.from({ length: count }, (_, i) => {
-                    const type = types[i % types.length];
-                    return {
-                        id: `${prefix}-${i}`,
-                        vignette: `${type.scenario} The patient is a ${20 + (i % 60)}-year-old with ${type.symptom}. Vital signs show HR ${80 + (i % 40)}, BP ${110 + (i % 30)}/70, Temp ${37 + (i % 2)}.`,
-                        options: type.options,
-                        correctAnswer: type.correctIdx,
-                        explanation: `This case highlights ${type.pearl}. In medical boards, always look for ${type.clue} to differentiate from other diagnoses.`,
-                        category: type.label
-                    };
-                });
+        /**
+         * --- DATA ENGINE ---
+         */
+        const EXAMS = ['USMLE Step 1', 'USMLE Step 2 CK', 'PLAB / UKMLA'];
+        const CHAPTERS = ["Cardiology", "Renal", "Pulmonology", "Gastroenterology", "Neurology", "Endocrinology", "Hematology", "Infectious Disease", "Rheumatology", "Psychiatry"];
+        
+        // Procedural Question Generator
+        const generateQuestions = (chapter, count) => {
+            const templates = {
+                Cardiology: [
+                    { v: "A 55-year-old male with tearing chest pain radiating to the back. BP 190/100.", q: "What is the best initial step?", o: ["IV Beta-blockers", "Thrombolysis", "Emergent Surgery", "CT Angio"], c: 0, e: "Aortic dissection requires immediate impulse control (dP/dt) with beta-blockers before imaging." },
+                    { v: "A 72-year-old female with syncope and a crescendo-decrescendo systolic murmur.", q: "What is the diagnosis?", o: ["Aortic Stenosis", "Mitral Regurgitation", "HOCM", "VSD"], c: 0, e: "The triad of syncope, angina, and dyspnea is classic for Aortic Stenosis." }
+                ],
+                Renal: [
+                    { v: "A 7-year-old boy with cola-colored urine 2 weeks after a sore throat.", q: "What is seen on biopsy?", o: ["Subepithelial humps", "Linear IgG", "Mesangial deposits", "Tram-tracking"], c: 0, e: "Post-streptococcal glomerulonephritis presents with subepithelial humps on EM." }
+                ]
             };
+            const base = templates[chapter] || templates['Cardiology'];
+            return Array.from({ length: count }, (_, i) => {
+                const t = base[i % base.length];
+                return {
+                    id: `${chapter.substring(0,3).toUpperCase()}-${1000+i}`,
+                    vignette: `[Case ${i+1}] ${t.v} The patient has stable vitals otherwise.`,
+                    question: t.q,
+                    options: t.o,
+                    correct: t.c,
+                    explanation: t.e
+                };
+            });
+        };
 
-            const IM_TYPES = [
-                { label: "Cardiology", scenario: "A patient presents with sudden tearing chest pain radiating to the back.", symptom: "a BP differential between arms", options: ["Aortic Dissection", "MI", "PE", "Pneumothorax"], correctIdx: 0, pearl: "the importance of the widened mediastinum on CXR", clue: "asymmetric pulses" },
-                { label: "Endocrine", scenario: "A patient presents with polyuria, polydipsia, and weight loss.", symptom: "a fruity odor on their breath", options: ["Type 2 Diabetes", "DKA", "Diabetes Insipidus", "SIADH"], correctIdx: 1, pearl: "insulin deficiency leading to ketone production", clue: "anion gap acidosis" },
-                { label: "Pulmonary", scenario: "A patient presents with acute onset shortness of breath after a long-haul flight.", symptom: "pleuritic chest pain", options: ["Pneumonia", "PE", "Asthma", "COPD"], correctIdx: 1, pearl: "Virchow's triad of stasis, hypercoagulability, and injury", clue: "S1Q3T3 on ECG" }
-            ];
+        const LAB_VALUES = [
+            { cat: 'Blood', items: [{n:'Hb', v:'13.5-17.5'}, {n:'WBC', v:'4.5-11.0'}, {n:'Plt', v:'150-400'}] },
+            { cat: 'Electrolytes', items: [{n:'Na', v:'135-145'}, {n:'K', v:'3.5-5.0'}, {n:'Cl', v:'98-106'}, {n:'Ca', v:'8.4-10.2'}] },
+            { cat: 'Renal', items: [{n:'BUN', v:'7-20'}, {n:'Cr', v:'0.6-1.2'}] }
+        ];
 
-            const SURG_TYPES = [
-                { label: "Trauma", scenario: "Following a motor vehicle accident, a patient has tracheal deviation and absent breath sounds.", symptom: "distended neck veins", options: ["Tension Pneumothorax", "Hemothorax", "Cardiac Tamponade", "Flail Chest"], correctIdx: 0, pearl: "immediate needle decompression", clue: "hemodynamic instability" },
-                { label: "Acute Abdomen", scenario: "A 25-year-old presents with periumbilical pain that migrated to the RLQ.", symptom: "rebound tenderness at McBurney's point", options: ["Cholecystitis", "Diverticulitis", "Appendicitis", "Small Bowel Obstruction"], correctIdx: 2, pearl: "clinical diagnosis and surgical consultation", clue: "Rovsing sign" }
-            ];
+        const LIBRARY_CONTENT = [
+            { title: "STEMI Protocol", tag: "Cardio", source: "Mo Sobhy", text: "Time is muscle. Door-to-balloon <90 mins. MONA is out; think Antiplatelets (ASA+P2Y12) + Anticoagulation." },
+            { title: "Sepsis 6", tag: "Emergency", source: "UKMLA Gold", text: "Give 3: O2, Fluids, Abx. Take 3: Blood Cultures, Lactate, Urine Output. Start within 1 hour." },
+            { title: "Mental Capacity Act", tag: "Ethics", source: "Dr Lovaan", text: "Assume capacity. Unwise decisions allowed. 4 steps: Understand, Retain, Weigh, Communicate." }
+        ];
 
-            const MOCKS = useMemo(() => ({
-                "Internal Medicine": {
-                    "High-Yield Block A": generateQuestions("im-a", 50, IM_TYPES),
-                    "High-Yield Block B": generateQuestions("im-b", 50, IM_TYPES)
-                },
-                "Surgery": {
-                    "Trauma & Critical Care": generateQuestions("surg-a", 50, SURG_TYPES),
-                    "General Surgery Mastery": generateQuestions("surg-b", 50, SURG_TYPES)
-                }
-            }), []);
+        const VIDEO_CONTENT = [
+            { title: "Cardio Exam (OSCE)", dur: "14:20", cat: "Clinical Skills", color: "bg-rose-500" },
+            { title: "Cranial Nerves", dur: "18:45", cat: "Neurology", color: "bg-indigo-500" },
+            { title: "Abdominal Exam", dur: "12:10", cat: "Clinical Skills", color: "bg-emerald-500" }
+        ];
 
-            const LAB_VALUES = [
-                { name: "Sodium", range: "135–145 mEq/L" },
-                { name: "Potassium", range: "3.5–5.0 mEq/L" },
-                { name: "Hemoglobin (M)", range: "13.5–17.5 g/dL" },
-                { name: "WBC Count", range: "4,500–11,000/mm³" },
-                { name: "Creatinine", range: "0.7–1.3 mg/dL" }
-            ];
+        /**
+         * --- COMPONENTS ---
+         */
 
+        // 1. Analytics Chart Component
+        const PerformanceChart = ({ data }) => {
+            const canvasRef = useRef(null);
             useEffect(() => {
-                let timer;
-                if (activePage === 'quiz' && isTimed && timeLeft > 0 && !showResults) {
-                    timer = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
-                } else if (timeLeft === 0 && isTimed && activePage === 'quiz') {
-                    setShowResults(true);
-                }
-                return () => clearInterval(timer);
-            }, [activePage, isTimed, timeLeft, showResults]);
+                if (!canvasRef.current) return;
+                const ctx = canvasRef.current.getContext('2d');
+                const chart = new Chart(ctx, {
+                    type: 'radar',
+                    data: {
+                        labels: CHAPTERS.slice(0, 6),
+                        datasets: [{
+                            label: 'Mastery',
+                            data: [85, 60, 45, 90, 70, 55],
+                            backgroundColor: 'rgba(79, 70, 229, 0.2)',
+                            borderColor: '#4F46E5',
+                            pointBackgroundColor: '#4F46E5',
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: { r: { suggestedMin: 0, suggestedMax: 100 } }
+                    }
+                });
+                return () => chart.destroy();
+            }, []);
+            return <div className="chart-container"><canvas ref={canvasRef}></canvas></div>;
+        };
 
-            const formatTime = (s) => {
-                const mins = Math.floor(s / 60);
-                const secs = s % 60;
-                return `${mins}:${secs.toString().padStart(2, '0')}`;
-            };
+        // 2. Sidebar Navigation
+        const Sidebar = ({ activeTab, setTab, isPro, setPro }) => (
+            <aside className="w-64 bg-white border-r border-slate-200 flex flex-col h-screen sticky top-0 hidden lg:flex">
+                <div className="p-8 flex items-center gap-3">
+                    <div className="bg-indigo-600 p-2 rounded-xl text-white"><Icon name="Activity" /></div>
+                    <span className="font-black text-xl tracking-tighter">OpenMedPrep</span>
+                </div>
+                <nav className="flex-1 px-4 space-y-1">
+                    {[
+                        { id: 'dash', label: 'Dashboard', icon: 'Layout' },
+                        { id: 'bank', label: 'Question Bank', icon: 'BookOpen' },
+                        { id: 'library', label: 'Study Library', icon: 'Search' },
+                        { id: 'videos', label: 'Video Library', icon: 'Play' },
+                        { id: 'mock', label: 'Mock Generator', icon: 'Clock' },
+                        { id: 'analytics', label: 'Analytics', icon: 'BarChart' }
+                    ].map(item => (
+                        <button key={item.id} onClick={() => setTab(item.id)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all ${activeTab === item.id ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-50'}`}>
+                            <Icon name={item.icon} size={18} />
+                            {item.label}
+                        </button>
+                    ))}
+                </nav>
+                <div className="p-6">
+                    <div className="bg-slate-900 rounded-2xl p-5 text-white relative overflow-hidden">
+                        <div className="relative z-10">
+                            <p className="text-xs font-bold text-indigo-300 uppercase mb-1">Plan Status</p>
+                            <p className="font-bold mb-4">{isPro ? "Pro Active" : "Free Plan"}</p>
+                            {!isPro && <button onClick={() => setPro(true)} className="w-full bg-indigo-600 py-2 rounded-lg text-xs font-bold hover:bg-indigo-500 transition-colors">Upgrade to Pro</button>}
+                        </div>
+                    </div>
+                </div>
+            </aside>
+        );
 
-            const startExam = (examKey, mockName) => {
-                setSelectedExam(examKey);
-                setSelectedMock(mockName);
-                setTimeLeft(MOCKS[examKey][mockName].length * 90);
-                setAnswers({});
-                setFlaggedQuestions([]);
-                setCurrentQuestionIdx(0);
-                setShowResults(false);
-                setActivePage('quiz');
-            };
+        // 3. Main Application Logic
+        const App = () => {
+            const [view, setView] = useState('dash');
+            const [isPro, setIsPro] = useState(false);
+            const [session, setSession] = useState(null); // { active: bool, questions: [], index: 0, answers: {}, mode: 'study'|'timed' }
+            const [showLabs, setShowLabs] = useState(false);
+            
+            // --- VIEW: DASHBOARD ---
+            const Dashboard = () => (
+                <div className="p-8 md:p-12 animate-in fade-in space-y-8">
+                    <header className="flex justify-between items-end">
+                        <div>
+                            <h1 className="text-3xl font-black text-slate-900">Dashboard</h1>
+                            <p className="text-slate-500">Welcome back, Dr. Smith.</p>
+                        </div>
+                        <div className="text-right">
+                            <p className="text-xs font-bold text-slate-400 uppercase">Daily Streak</p>
+                            <p className="text-2xl font-black text-indigo-600">12 Days 🔥</p>
+                        </div>
+                    </header>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm col-span-2">
+                            <h3 className="font-bold mb-4">Activity Heatmap</h3>
+                            <div className="h-48 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 text-sm">
+                                <PerformanceChart />
+                            </div>
+                        </div>
+                        <div className="bg-indigo-600 p-6 rounded-3xl text-white shadow-xl shadow-indigo-200">
+                            <h3 className="font-bold mb-2">Quick Start</h3>
+                            <p className="text-indigo-200 text-sm mb-6">Resume your Cardiology block.</p>
+                            <button onClick={() => startSession('Cardiology', 10, 'study')} className="w-full bg-white text-indigo-600 py-3 rounded-xl font-bold text-sm">Resume</button>
+                        </div>
+                    </div>
+                </div>
+            );
 
-            if (activePage === 'quiz') {
-                const questions = MOCKS[selectedExam][selectedMock];
-                const q = questions[currentQuestionIdx];
-                const isFlagged = flaggedQuestions.includes(q.id);
+            // --- VIEW: QUESTION BANK ---
+            const QuestionBank = () => (
+                <div className="p-8 md:p-12 animate-in fade-in">
+                    <h2 className="text-3xl font-black mb-8">Study Centers</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {EXAMS.map(exam => (
+                            <div key={exam} className="bg-white p-8 rounded-[2rem] border border-slate-200 hover:shadow-xl transition-all cursor-pointer group">
+                                <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center mb-6"><Icon name="BookOpen" /></div>
+                                <h3 className="font-bold text-lg mb-2">{exam}</h3>
+                                <p className="text-slate-400 text-sm mb-6">Comprehensive question bank with 150+ questions per chapter.</p>
+                                <div className="space-y-2">
+                                    {CHAPTERS.slice(0, 3).map(ch => (
+                                        <button key={ch} onClick={() => startSession(ch, 150, 'study')} className="w-full text-left py-2 px-3 hover:bg-slate-50 rounded-lg text-sm font-medium text-slate-600 flex justify-between">
+                                            {ch} <Icon name="ChevronRight" size={14} />
+                                        </button>
+                                    ))}
+                                    <div className="text-xs text-center text-slate-400 py-2">View all 12 chapters</div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
 
-                if (showResults) {
-                    const score = questions.reduce((acc, curr, idx) => acc + (answers[idx] === curr.correctAnswer ? 1 : 0), 0);
-                    return React.createElement('div', { className: "min-h-screen bg-slate-50 p-8 overflow-y-auto custom-scrollbar" },
-                        React.createElement('div', { className: "max-w-4xl mx-auto space-y-6 pb-20" },
-                            React.createElement('div', { className: "bg-white p-10 rounded-[2.5rem] shadow-xl text-center border border-slate-100" },
-                                React.createElement('h1', { className: "text-3xl font-black mb-2" }, "Performance Report"),
-                                React.createElement('p', { className: "text-slate-400 font-medium mb-8" }, `${selectedMock} • Review Mode`),
-                                React.createElement('div', { className: "flex justify-center gap-16" },
-                                    React.createElement('div', null, React.createElement('p', { className: "text-5xl font-black text-blue-600" }, `${Math.round((score/questions.length)*100)}%`), React.createElement('p', { className: "text-[10px] font-black uppercase text-slate-400 mt-2" }, "Accuracy")),
-                                    React.createElement('div', null, React.createElement('p', { className: "text-5xl font-black text-slate-800" }, `${score}`), React.createElement('p', { className: "text-[10px] font-black uppercase text-slate-400 mt-2" }, "Correct")),
-                                    React.createElement('div', null, React.createElement('p', { className: "text-5xl font-black text-slate-300" }, `${questions.length - score}`), React.createElement('p', { className: "text-[10px] font-black uppercase text-slate-400 mt-2" }, "Incorrect"))
-                                ),
-                                React.createElement('button', { onClick: () => setActivePage('home'), className: "mt-10 bg-slate-900 text-white px-10 py-4 rounded-2xl font-bold hover:bg-black transition-all" }, "Back to Dashboard")
-                            ),
-                            questions.map((item, idx) => React.createElement('div', { key: idx, className: "bg-white p-8 rounded-3xl border border-slate-100 shadow-sm" },
-                                React.createElement('div', { className: "flex items-center justify-between mb-4" },
-                                    React.createElement('span', { className: "text-xs font-black text-slate-300 uppercase" }, `Question ${idx + 1}`),
-                                    answers[idx] === item.correctAnswer 
-                                        ? React.createElement('span', { className: "text-emerald-500 font-bold text-sm bg-emerald-50 px-3 py-1 rounded-full" }, "Correct")
-                                        : React.createElement('span', { className: "text-rose-500 font-bold text-sm bg-rose-50 px-3 py-1 rounded-full" }, "Incorrect")
-                                ),
-                                React.createElement('p', { className: "font-semibold text-slate-800 mb-6 leading-relaxed" }, item.vignette),
-                                React.createElement('div', { className: "p-5 bg-blue-50/50 rounded-2xl border border-blue-100" },
-                                    React.createElement('p', { className: "text-sm text-slate-700" }, React.createElement('span', { className: "font-black text-blue-600 uppercase text-[10px] block mb-1" }, "Educational Objective"), item.explanation)
-                                )
-                            ))
-                        )
-                    );
-                }
+            // --- VIEW: LIBRARY (Notes & Videos) ---
+            const Library = () => (
+                <div className="p-8 md:p-12 animate-in fade-in">
+                    <h2 className="text-3xl font-black mb-8">Knowledge Base</h2>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        <div>
+                            <h3 className="font-bold text-slate-400 text-xs uppercase tracking-widest mb-4">High-Yield Notes</h3>
+                            <div className="space-y-4">
+                                {LIBRARY_CONTENT.map((note, i) => (
+                                    <div key={i} className="bg-white p-6 rounded-2xl border border-slate-200 hover:border-indigo-500 transition-colors cursor-pointer">
+                                        <div className="flex justify-between mb-2">
+                                            <span className="text-[10px] font-bold bg-indigo-50 text-indigo-700 px-2 py-1 rounded">{note.tag}</span>
+                                            <span className="text-[10px] font-bold text-slate-400">{note.source}</span>
+                                        </div>
+                                        <h4 className="font-bold text-slate-800 mb-1">{note.title}</h4>
+                                        <p className="text-xs text-slate-500 line-clamp-2">{note.text}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-slate-400 text-xs uppercase tracking-widest mb-4">Clinical Videos</h3>
+                            <div className="grid grid-cols-1 gap-4">
+                                {VIDEO_CONTENT.map((vid, i) => (
+                                    <div key={i} className="group bg-white rounded-2xl border border-slate-200 overflow-hidden cursor-pointer hover:shadow-lg transition-all flex">
+                                        <div className={`w-32 ${vid.color} flex items-center justify-center text-white`}>
+                                            <Icon name="Play" />
+                                        </div>
+                                        <div className="p-4 flex-1">
+                                            <h4 className="font-bold text-sm mb-1 group-hover:text-indigo-600">{vid.title}</h4>
+                                            <p className="text-xs text-slate-400">{vid.cat} • {vid.dur}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
 
-                return React.createElement('div', { className: "h-screen bg-white flex flex-col relative" },
-                    // TOP BAR
-                    React.createElement('div', { className: "bg-slate-900 text-white p-5 flex items-center justify-between z-20" },
-                        React.createElement('div', { className: "flex items-center gap-5" },
-                            React.createElement('button', { onClick: () => setActivePage('home'), className: "text-white/40 hover:text-white" }, React.createElement(Icon, { name: "X" })),
-                            React.createElement('div', { className: "h-8 w-px bg-white/10" }),
-                            React.createElement('div', null, 
-                                React.createElement('p', { className: "text-[9px] font-black uppercase text-blue-400 tracking-tighter" }, selectedMock),
-                                React.createElement('h2', { className: "text-sm font-bold" }, `Q${currentQuestionIdx + 1} / ${questions.length}`)
-                            )
-                        ),
-                        React.createElement('div', { className: "flex items-center gap-6" },
-                            React.createElement('button', { onClick: () => setShowLabs(!showLabs), className: "text-xs font-black uppercase bg-white/10 px-4 py-2 rounded-lg hover:bg-white/20" }, "Lab Values"),
-                            isTimed && React.createElement('div', { className: `font-mono text-lg font-bold ${timeLeft < 300 ? 'timer-low' : ''}` }, formatTime(timeLeft)),
-                            React.createElement('button', { onClick: () => setFlaggedQuestions(f => f.includes(q.id) ? f.filter(id => id !== q.id) : [...f, q.id]), className: `flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-xs ${isFlagged ? 'bg-orange-500' : 'bg-white/5 text-white/30'}` }, React.createElement(Icon, { name: "Bookmark", size: 14, fill: isFlagged ? "white" : "none" }), isFlagged ? "Flagged" : "Flag")
-                        )
-                    ),
-                    // LAB PANEL OVERLAY
-                    showLabs && React.createElement('div', { className: "absolute top-20 right-8 w-80 bg-white shadow-2xl rounded-3xl border border-slate-200 p-6 z-50 animate-fade-in" },
-                        React.createElement('div', { className: "flex justify-between items-center mb-4" }, React.createElement('h3', { className: "font-black text-sm uppercase" }, "Standard Labs"), React.createElement('button', { onClick: () => setShowLabs(false) }, React.createElement(Icon, { name: "X", size: 16 }))),
-                        React.createElement('div', { className: "space-y-3" }, LAB_VALUES.map(l => React.createElement('div', { key: l.name, className: "flex justify-between text-xs py-2 border-b border-slate-50" }, React.createElement('span', { className: "text-slate-500 font-medium" }, l.name), React.createElement('span', { className: "font-bold" }, l.range))))
-                    ),
-                    // MAIN CONTENT
-                    React.createElement('div', { className: "flex-1 overflow-y-auto p-12 lg:px-64 lg:py-20" },
-                        React.createElement('div', { className: "max-w-4xl mx-auto" },
-                            React.createElement('p', { className: "text-2xl font-bold text-slate-800 leading-relaxed mb-12" }, q.vignette),
-                            React.createElement('div', { className: "space-y-3" },
-                                q.options.map((opt, idx) => React.createElement('button', {
-                                    key: idx,
-                                    onClick: () => setAnswers({...answers, [currentQuestionIdx]: idx}),
-                                    className: `w-full text-left p-6 rounded-2xl border-2 transition-all flex items-center gap-5 ${answers[currentQuestionIdx] === idx ? 'border-blue-600 bg-blue-50/50' : 'border-slate-100 hover:border-slate-300 bg-white'}`
-                                },
-                                    React.createElement('div', { className: `w-10 h-10 rounded-xl flex items-center justify-center font-bold ${answers[currentQuestionIdx] === idx ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}` }, String.fromCharCode(65 + idx)),
-                                    React.createElement('span', { className: "font-bold text-slate-700" }, opt)
-                                ))
-                            )
-                        )
-                    ),
-                    // FOOTER
-                    React.createElement('div', { className: "p-6 border-t border-slate-100 bg-white flex justify-between items-center shadow-lg" },
-                        React.createElement('button', { onClick: () => setCurrentQuestionIdx(prev => prev - 1), disabled: currentQuestionIdx === 0, className: "px-8 py-3 font-bold text-slate-400 disabled:opacity-0" }, "Previous"),
-                        React.createElement('div', { className: "flex gap-4" },
-                            currentQuestionIdx + 1 === questions.length ? 
-                            React.createElement('button', { onClick: () => setShowResults(true), className: "bg-blue-600 text-white px-10 py-4 rounded-2xl font-black shadow-xl shadow-blue-100" }, "Finish Exam") :
-                            React.createElement('button', { onClick: () => setCurrentQuestionIdx(prev => prev + 1), className: "bg-slate-900 text-white px-12 py-4 rounded-2xl font-black hover:bg-black" }, "Next Question")
-                        )
-                    )
+            // --- VIEW: QUIZ SESSION ---
+            const QuizSession = () => {
+                const q = session.questions[session.index];
+                const [selected, setSelected] = useState(null);
+                const [submitted, setSubmitted] = useState(false);
+                const [timeLeft, setTimeLeft] = useState(session.mode === 'timed' ? session.questions.length * 90 : 0);
+
+                // Timer Logic
+                useEffect(() => {
+                    if (session.mode !== 'timed' || submitted) return;
+                    const t = setInterval(() => setTimeLeft(l => Math.max(0, l - 1)), 1000);
+                    return () => clearInterval(t);
+                }, [submitted]);
+
+                const handleSubmit = () => setSubmitted(true);
+                const handleNext = () => {
+                    if (session.index + 1 < session.questions.length) {
+                        setSession(prev => ({ ...prev, index: prev.index + 1 }));
+                        setSelected(null);
+                        setSubmitted(false);
+                    } else {
+                        setView('dashboard'); // Or results page
+                    }
+                };
+
+                const formatTime = (s) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+
+                return (
+                    <div className="flex flex-col h-screen bg-slate-50">
+                        {/* Quiz Header */}
+                        <header className="h-16 bg-white border-b flex items-center justify-between px-6 shrink-0">
+                            <div className="flex items-center gap-4">
+                                <button onClick={() => setView('dashboard')} className="p-2 hover:bg-slate-100 rounded-full text-slate-400"><Icon name="X" /></button>
+                                <span className="font-bold text-slate-700">Question {session.index + 1} of {session.questions.length}</span>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                {session.mode === 'timed' && (
+                                    <div className="bg-slate-100 px-3 py-1 rounded-md font-mono font-bold text-indigo-600 flex items-center gap-2">
+                                        <Icon name="Clock" size={14} /> {formatTime(timeLeft)}
+                                    </div>
+                                )}
+                                <button onClick={() => setShowLabs(!showLabs)} className="text-xs font-bold bg-slate-800 text-white px-3 py-2 rounded-lg hover:bg-slate-700 transition-colors">Lab Values</button>
+                                <button className="text-slate-400 hover:text-rose-500"><Icon name="Flag" /></button>
+                            </div>
+                        </header>
+
+                        <div className="flex-1 flex overflow-hidden relative">
+                            {/* Labs Panel */}
+                            {showLabs && (
+                                <div className="absolute top-4 right-4 w-64 bg-white shadow-2xl rounded-xl border border-slate-200 z-50 p-4 max-h-[80%] overflow-y-auto animate-in fade-in slide-in-from-right-4">
+                                    <div className="flex justify-between mb-4"><h4 className="font-bold">Labs</h4><button onClick={()=>setShowLabs(false)}><Icon name="X" size={16}/></button></div>
+                                    {LAB_VALUES.map(cat => (
+                                        <div key={cat.cat} className="mb-4">
+                                            <p className="text-[10px] font-bold text-indigo-600 uppercase mb-2">{cat.cat}</p>
+                                            {cat.items.map(l => (
+                                                <div key={l.n} className="flex justify-between text-xs py-1 border-b border-slate-50">
+                                                    <span className="text-slate-500">{l.n}</span><span className="font-bold">{l.v}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* Split Pane */}
+                            <div className="flex-1 overflow-y-auto p-8 lg:p-12 border-r bg-white">
+                                <div className="max-w-3xl mx-auto">
+                                    <p className="text-xl text-slate-800 leading-relaxed font-medium mb-10">{q.vignette}</p>
+                                    <p className="font-bold text-lg text-slate-900 border-l-4 border-indigo-600 pl-4">{q.question}</p>
+                                </div>
+                            </div>
+
+                            <div className="w-[450px] bg-slate-50 p-8 overflow-y-auto flex flex-col">
+                                <div className="space-y-3 flex-1">
+                                    {q.options.map((opt, i) => {
+                                        const isSel = selected === i;
+                                        const isCor = i === q.correct;
+                                        let style = "bg-white border-transparent hover:border-slate-300";
+                                        if (isSel) style = "bg-indigo-600 text-white border-indigo-600";
+                                        if (submitted) {
+                                            if (isCor) style = "bg-emerald-100 border-emerald-500 text-emerald-800";
+                                            else if (isSel) style = "bg-rose-100 border-rose-500 text-rose-800";
+                                            else style = "opacity-50";
+                                        }
+                                        return (
+                                            <button key={i} disabled={submitted} onClick={() => setSelected(i)} className={`w-full text-left p-4 rounded-xl border-2 transition-all font-medium flex gap-3 ${style}`}>
+                                                <span className="opacity-50 font-bold">{String.fromCharCode(65+i)}</span> {opt}
+                                            </button>
+                                        );
+                                    })}
+                                    {submitted && (
+                                        <div className="mt-6 p-4 bg-white rounded-xl border border-slate-200 animate-in slide-in-from-bottom-2">
+                                            <p className="text-xs font-bold text-indigo-600 uppercase mb-2">Explanation</p>
+                                            <p className="text-sm text-slate-600 leading-relaxed">{q.explanation}</p>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="pt-6">
+                                    {!submitted ? 
+                                        <button onClick={handleSubmit} disabled={selected === null} className="w-full py-4 bg-indigo-600 text-white font-bold rounded-xl shadow-lg disabled:opacity-50">Submit Answer</button> :
+                                        <button onClick={handleNext} className="w-full py-4 bg-slate-900 text-white font-bold rounded-xl shadow-lg">Next Question</button>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 );
-            }
+            };
 
-            return React.createElement('div', { className: "min-h-screen flex bg-slate-50/50" },
-                // SIDEBAR
-                React.createElement('aside', { className: "w-72 bg-white border-r border-slate-200 hidden lg:flex flex-col" },
-                    React.createElement('div', { className: "p-8 mb-4" },
-                        React.createElement('div', { className: "flex items-center gap-3" },
-                            React.createElement('div', { className: "w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-200" }, React.createElement(Icon, { name: "Stethoscope", fill: "white" })),
-                            React.createElement('span', { className: "font-black text-xl tracking-tighter" }, "OpenMedPrep")
-                        )
-                    ),
-                    React.createElement('nav', { className: "px-4 space-y-1" },
-                        [
-                            { id: 'home', icon: 'Layout', label: 'Dashboard' },
-                            { id: 'bank', icon: 'Database', label: 'Question Bank' },
-                            { id: 'stats', icon: 'BarChart2', label: 'Analytics' },
-                            { id: 'library', icon: 'BookOpen', label: 'Study Library' }
-                        ].map(item => React.createElement('button', {
-                            key: item.id,
-                            onClick: () => setActivePage(item.id),
-                            className: `w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-bold transition-all ${activePage === item.id ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'text-slate-400 hover:text-slate-900'}`
-                        }, React.createElement(Icon, { name: item.icon, color: activePage === item.id ? "white" : "currentColor" }), item.label))
-                    ),
-                    React.createElement('div', { className: "mt-auto p-6" },
-                        React.createElement('div', { className: "bg-slate-900 rounded-3xl p-6 text-white" },
-                            React.createElement('p', { className: "text-xs font-black text-white/40 uppercase mb-4" }, "Weekly Goal"),
-                            React.createElement('div', { className: "flex justify-between items-end mb-2" }, React.createElement('span', { className: "text-2xl font-black" }, "64%"), React.createElement('span', { className: "text-[10px] text-white/40" }, "320 / 500 Qs")),
-                            React.createElement('div', { className: "h-2 w-full bg-white/10 rounded-full overflow-hidden" }, React.createElement('div', { className: "h-full bg-blue-500", style: { width: '64%' } }))
-                        )
-                    )
-                ),
-                // MAIN DASHBOARD
-                React.createElement('main', { className: "flex-1 h-screen overflow-y-auto custom-scrollbar" },
-                    React.createElement('div', { className: "max-w-6xl mx-auto p-8 lg:p-12 pb-32" },
-                        React.createElement('header', { className: "flex flex-col md:flex-row md:items-end justify-between gap-6 mb-16 animate-fade-in" },
-                            React.createElement('div', null,
-                                React.createElement('h1', { className: "text-5xl font-black tracking-tighter mb-2" }, "Dashboard"),
-                                React.createElement('p', { className: "text-slate-400 text-lg font-medium" }, "Focus on Internal Medicine today.")
-                            ),
-                            React.createElement('div', { className: "flex items-center gap-4 bg-white p-3 px-6 rounded-3xl shadow-sm border border-slate-200" },
-                                React.createElement('span', { className: "font-black text-xs text-slate-400 uppercase tracking-widest" }, "Simulation Mode"),
-                                React.createElement('button', { onClick: () => setIsTimed(!isTimed), className: `w-12 h-7 rounded-full relative transition-all ${isTimed ? 'bg-blue-600' : 'bg-slate-200'}` }, 
-                                    React.createElement('div', { className: `absolute top-1 w-5 h-5 bg-white rounded-full transition-all ${isTimed ? 'left-6' : 'left-1'}` })
-                                )
-                            )
-                        ),
+            // --- UTILS ---
+            const startSession = (chapter, count, mode) => {
+                const qs = generateQuestions(chapter, count);
+                setSession({ active: true, questions: qs, index: 0, answers: {}, mode });
+                setView('session');
+            };
 
-                        React.createElement('div', { className: "grid grid-cols-1 lg:grid-cols-3 gap-12" },
-                            React.createElement('div', { className: "lg:col-span-2 space-y-12" },
-                                Object.entries(MOCKS).map(([examKey, mocks], sectionIdx) => (
-                                    React.createElement('section', { key: examKey, className: "space-y-6 animate-fade-in", style: { animationDelay: `${sectionIdx * 0.1}s` } },
-                                        React.createElement('div', { className: "flex items-center justify-between" },
-                                            React.createElement('h3', { className: "text-xs font-black text-slate-400 uppercase tracking-[0.3em]" }, examKey),
-                                            React.createElement('span', { className: "text-blue-600 text-xs font-black uppercase" }, "Browse Chapter")
-                                        ),
-                                        React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-2 gap-6" },
-                                            Object.keys(mocks).map(name => (
-                                                React.createElement('div', { key: name, className: "bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm hover:shadow-xl transition-all group cursor-pointer", onClick: () => startExam(examKey, name) },
-                                                    React.createElement('div', { className: "flex justify-between items-start mb-6" },
-                                                        React.createElement('div', { className: "w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 group-hover:bg-blue-600 group-hover:text-white transition-all" }, React.createElement(Icon, { name: "ClipboardCheck" })),
-                                                        React.createElement('div', { className: "flex flex-col items-end" }, 
-                                                            React.createElement('span', { className: "text-[10px] font-black text-slate-300 uppercase" }, "Length"),
-                                                            React.createElement('span', { className: "text-sm font-bold text-slate-600" }, `${mocks[name].length} Qs`)
-                                                        )
-                                                    ),
-                                                    React.createElement('h4', { className: "text-xl font-black mb-1 leading-tight" }, name),
-                                                    React.createElement('p', { className: "text-sm text-slate-400 font-medium mb-8" }, "High-yield vignettes covering core specialty concepts."),
-                                                    React.createElement('div', { className: "flex items-center gap-2 text-blue-600 font-black text-xs uppercase" }, "Launch Test", React.createElement(Icon, { name: "ChevronRight", size: 14 }))
-                                                )
-                                            ))
-                                        )
-                                    )
-                                ))
-                            ),
-                            // SECONDARY SIDEBAR
-                            React.createElement('div', { className: "space-y-12" },
-                                React.createElement('div', { className: "bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm" },
-                                    React.createElement('h3', { className: "font-black text-sm uppercase text-slate-400 mb-6 tracking-widest" }, "Performance Matrix"),
-                                    React.createElement('div', { className: "space-y-6" },
-                                        ['Cardiology', 'Surgery', 'Endocrine'].map((subj, idx) => (
-                                            React.createElement('div', { key: subj },
-                                                React.createElement('div', { className: "flex justify-between text-xs font-bold mb-2" }, React.createElement('span', null, subj), React.createElement('span', { className: "text-slate-400" }, `${80 - idx * 10}%`)),
-                                                React.createElement('div', { className: "h-1.5 w-full bg-slate-100 rounded-full" }, React.createElement('div', { className: "h-full bg-slate-900 rounded-full", style: { width: `${80 - idx * 10}%` } }))
-                                            )
-                                        ))
-                                    )
-                                ),
-                                React.createElement('div', { className: "bg-blue-600 p-8 rounded-[2.5rem] text-white shadow-2xl shadow-blue-200" },
-                                    React.createElement('h3', { className: "text-xl font-black mb-4 leading-tight" }, "Ready for a full Mock?"),
-                                    React.createElement('p', { className: "text-blue-100 text-sm mb-6 leading-relaxed" }, "Simulate a real 8-hour testing day with our comprehensive randomized blocks."),
-                                    React.createElement('button', { className: "w-full py-4 bg-white text-blue-600 rounded-2xl font-black text-sm uppercase shadow-lg shadow-blue-800/20" }, "Generate Full Mock")
-                                )
-                            )
-                        )
-                    )
-                )
+            // --- ROUTER ---
+            return (
+                <div className="flex h-screen bg-[#F8FAFC]">
+                    {view !== 'session' && <Sidebar activeTab={view} setTab={setView} isPro={isPro} setPro={setIsPro} />}
+                    <main className="flex-1 h-screen overflow-hidden relative">
+                        {view === 'dash' && <Dashboard />}
+                        {view === 'bank' && <QuestionBank />}
+                        {view === 'library' && <Library />}
+                        {view === 'videos' && <Library />} {/* Reusing Library layout for video example */}
+                        {view === 'mock' && (
+                             <div className="p-12 flex flex-col items-center justify-center h-full text-center">
+                                <div className="bg-white p-12 rounded-[3rem] shadow-xl border border-slate-200 max-w-lg">
+                                    <div className="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-6"><Icon name="Clock" size={32}/></div>
+                                    <h2 className="text-3xl font-black mb-4">Mock Simulator</h2>
+                                    <p className="text-slate-500 mb-8">Generate a randomized 40-question block to simulate real exam conditions.</p>
+                                    {!isPro ? (
+                                        <button onClick={() => setIsPro(true)} className="w-full py-4 bg-slate-900 text-white font-bold rounded-xl flex items-center justify-center gap-2"><Icon name="Lock" size={16}/> Unlock with Pro</button>
+                                    ) : (
+                                        <button onClick={() => startSession('Random', 40, 'timed')} className="w-full py-4 bg-indigo-600 text-white font-bold rounded-xl shadow-xl shadow-indigo-200">Start 40-Block Mock</button>
+                                    )}
+                                </div>
+                             </div>
+                        )}
+                        {view === 'session' && <QuizSession />}
+                    </main>
+                </div>
             );
         };
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(React.createElement(App));
+        root.render(<App />);
     </script>
 </body>
 </html>
